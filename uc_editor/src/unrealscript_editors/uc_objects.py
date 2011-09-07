@@ -14,11 +14,13 @@ class UCObjectBase( object ):
   
 
 class UCParentBase( UCObjectBase ):
+  VALID_CHILDREN = ( UCObjectBase )
+  
   def __init__( self ):
     self._children = [ ]
   
   def add_child( self, object ):
-    assert isinstance( object, UCObjectBase )
+    assert isinstance( object, self.VALID_CHILDREN )
     if not object in self._children:
       self._children.append( object )
       
@@ -61,9 +63,26 @@ class Comment( UCObjectBase ):
     output_text = '{0}\n'.format( output_text )
       
     return output_text
+  
+  def __repr__( self ):
+    return '< UC Comment object( {0!r} )>'.format( self._text )
       
-    
-      
+class ClassDelcarations( UCParentBase ):
+  """
+  The Declarations at the beginning of an unrealscript class
+  """
+
+class ClassBody( UCParentBase ):
+  """
+  The body of an unrealscript class (its functions, operators, and states)
+  """
+  
+class DefaultProperites( UCParentBase ):
+  """
+  The Default Properties block of an unrealscript class
+  """
+
+  
 class Class( UCParentBase ):
   """
   Unrealscript class
@@ -72,7 +91,9 @@ class Class( UCParentBase ):
     self._class_name = class_name
     self._class_extends = class_extends
     self._params = list( set( params ) )
-    self._leading_comment = Comment( '' )
+
+    self._default_properties = DefaultProperites( )
+
     UCParentBase.__init__( self )
     
   def set_class_name( self, name ):
@@ -86,16 +107,6 @@ class Class( UCParentBase ):
     
   def get_class_extends( self ):
     return self._class_extends
-  
-  def add_child(self, object):
-    """
-    extend to make leading comments append to the object's leading comment
-    """
-    assert not self._class_name == None or isinstance( object, Comment )
-    if self._class_name == None and isinstance( object, Comment ):
-      self._leading_comment.append( object )
-    else:
-      UCParentBase.add_child(self, object)
   
   def add_param( self, param ):
     self._params = list( set( self._params.append( param ) ) )
@@ -115,12 +126,45 @@ class Class( UCParentBase ):
     
   def write_to_string( self ):
     pass
-    
-    
+  
+  def get_default_properties( self ):
+    return self._default_properties
+  
+  def set_default_properties( self, default_properties ):
+    self._default_properties = default_properties
+
 class BaseVar( UCObjectBase ):
   def __init__( self, name = None, value = None ):
     self._value = value
     self._name = name
+
+    
+  def set_value( self, value ):
+    self._value = value
+    
+  def get_value( self ):
+    return self._value
+  
+  def set_name( self, name ):
+    self._name = name
+    
+  def get_name( self ):
+    return self._name 
+  
+  def __repr__( self ):
+    return '< UC {0} object( Name = {1!r}, Value = {2!r} )>'.format( self.__class__.__name__,
+                                                                     self._name,
+                                                                     self._value )
+    
+class Variable( BaseVar ):
+  def __init__( self, name = None, value = None, type = None ):
+    
+    BaseVar.__init__( self, name, value )
+
+    if type == None:
+      self._type = None
+    else:
+      self.set_type( type )
     
   def set_value( self, value ):
     self._value = value
@@ -134,19 +178,22 @@ class BaseVar( UCObjectBase ):
   def get_name( self ):
     return self._name
   
+  def set_type( self, type ):
+    self._type = type
+  
+  def get_type( self ):
+    return self._type
+  
 class Const( BaseVar ):
   """
   Extension of basevar, doesn't make any changes atm.
   """
   pass
 
-
-
-class Var( ):
-
-    pass
-
 class UCBodyDecBase( UCParentBase ):
+  """
+  Abstract base for all body declarations( Function, State, Operator )
+  """
   def __init__( self,
                 name = None,
                 params = [ ],
@@ -210,8 +257,32 @@ class State( UCBodyDecBase ):
       
     def get_extends( self ):
       return self._extends
+  
 
+class DPProperty( UCObjectBase ):
+  def __init__( self, value = None, name = None ):
     
+    self._value = value
+    self._name = name
+    
+  def set_name( self, name ):
+    self._name = name
+    
+  def get_name( self ):
+    return self._name 
+    
+  def set_value( self, value ):
+    self._value = value
+    
+  def get_value( self ):
+    return self._value 
+    
+
+class DPObject( UCParentBase ):
+  VALID_CHIDLREN = ( DPProperty )
+  def add_child( self, object ):
+    assert isinstance( object, DPProperty )
+    UCParentBase.add_child(self, object)
   
 class Function( UCBodyDecBase ):
   def __init__( self,
@@ -229,6 +300,10 @@ class Function( UCBodyDecBase ):
     
   def get_type( self ):
     return self._type
+  
+  def __repr__( self ):
+    return '< UC {0} object( Name = {1!r} ) >'.format( self.__class__.__name__,
+                                                       self._name )
   
   def write_to_string( self, tabs = 0 ):
     pass

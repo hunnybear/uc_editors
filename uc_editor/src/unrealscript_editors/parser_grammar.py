@@ -16,6 +16,8 @@ VAR_DEC = ( 'var', ';' )
 STRUCT_DEC = ( 'struct', ';' )
 LOCAL_DEC = ( 'local', ';' )
 
+DEFAULT_PROPERTIES_DEC = ( 'defaultproperties', '}' )
+DP_OBJECT_DEC = ( 'begin object', 'end object' )
 
 
 
@@ -74,9 +76,13 @@ STATE_PARAMS = [ 'auto',
 
 STATE_TYPES = [ 'state' ]
 
-FUNCTION_TYPES = [ 'function',
-                   'event',
-                   'delegate' ]
+FUNC_TYPES = [ 'function',
+               'event',
+               'delegate' ]
+
+OPERATOR_TYPES = [ 'operator',
+                   'preoperator',
+                   'postoperator' ]
 
 
 ALPHA = string.ascii_letters
