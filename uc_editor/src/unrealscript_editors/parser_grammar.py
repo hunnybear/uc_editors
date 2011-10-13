@@ -9,7 +9,7 @@ import string
 ML_COMMENT = ( '/*', '*/' )
 SL_COMMENT = ( '//', '\n' )
 
-CLASS_DEC = ( 'class ', ';' )
+CLASS_DEC = ( 'class', ';' )
 
 CONST_DEC = ( 'const', ';' )
 VAR_DEC = ( 'var', ';' )

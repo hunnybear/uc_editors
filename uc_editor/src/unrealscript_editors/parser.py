@@ -12,102 +12,106 @@ test_full_func = "function int IncrementKillStat(name NewStatName)\n{\n  local i
 class UCParser( object ):
   def __init__( self ):
     self._class = uc_objects.Class( )
-    self._parse_string = ''
   
   def parse( self, in_file ):
 
     with open( in_file, 'r' ) as parse_file:
-      self.parse_from_string( parse_file.read( ) )
+      return self.parse_from_string( parse_file.read( ) )
       
   def parse_from_string( self, parse_string ):
-    self._parse_string = parse_string
-    self._parser_helper( self._class )
+    return self._parser_helper( self._class, parse_string )
 
-  def _comment_parse( self, parse_string = None  ):
-    """
-    Parsing for comments and removing whitespace, things that need to happen
-    inside of all parsing methods
-    """
-    new_comment = None
-    if parse_string == None:
-      parse_string = self._parse_string
+  def _comment_split( self, parse_string ):
     
     # Remove leading whitespace
     parse_string = parse_string.lstrip( )
 
     # Single Line Comments  
-    if self._is_beginning( pg.SL_COMMENT ):
-      print 'found sl comment'
-      parse = self._parse_search( pg.SL_COMMENT )
-      new_comment = uc_objects.Comment( parse[ 0 ] )
-      parse_string = parse[ 1 ]
+    if self._is_beginning( pg.SL_COMMENT, parse_string ):
+      return  self._parse_search( pg.SL_COMMENT, parse_string )
+    
+    elif self._is_beginning( pg.ML_COMMENT, parse_string ):
+      return self._parse_search( pg.ML_COMMENT, parse_string )
+    
+    else:
+      return False
+  
+  
+  def _comment_parse( self, parse_string ):
+    """
+    Parsing for comments and removing whitespace, things that need to happen
+    inside of all parsing methods
+    """
+    
+    if self._is_beginning( pg.SL_COMMENT, parse_string ):
+      text = self._parse_search( pg.SL_COMMENT, parse_string, strip=True )[ 0 ]
+    
+    elif self._is_beginning( pg.ML_COMMENT, parse_string ):
+      str_text = self._parse_search( pg.ML_COMMENT, parse_string, strip=True )
+      text = str_text[ 0 ].split( '\n' )
+      if text[ -1 ] == '':
+        text.pop( -1 )
+    return uc_objects.Comment( text )
 
-    # Multi-line comments    
-    # Same as single line comments except for the "M" instead of "S" 
-    elif self._is_beginning( pg.ML_COMMENT ):
-      print 'found ml comment'
-      parse = self._parse_search( pg.ML_COMMENT )
-      
-      print 'ml parse: {0}'.format( parse )
-      new_comment = uc_objects.Comment( parse[ 0 ] )
-      parse_string = parse[ 1 ]
-      
-    self._parse_string = parse_string
-    return new_comment
 
-  def _parser_helper( self, parent, block_end = None ):
+  def _parser_helper( self, parent, parse_string = None, block_end = None ):
     """
     The meat of the parsing.
     """
-    print 'parser helper'
-    
-    while len( self._parse_string ) > 0: 
-      while_string = self._parse_string
-      
-      new_comment = self._comment_parse( )
-      if not new_comment == None:
-        parent.add_child( new_comment ) 
+
+    while len( parse_string ) > 0: 
+      parse_string = parse_string.strip( )
+      while_string = parse_string
+           
+      if self._comment_split( parse_string ):
+        comment_split = self._comment_split( parse_string )
+        new_comment = self._comment_parse( comment_split[ 0 ] )
+        parent.add_child( new_comment )
+        parse_string = comment_split[ 1 ]
       
       # Class declaration
       
-      if self._is_beginning( pg.CLASS_DEC ):
-        print 'classy!'
-        self._parse_class_dec( )
+      
+      elif self._class_dec_split( parse_string ):
+        class_dec_split = self._class_dec_split( parse_string )
+        self._class_dec_parse( class_dec_split[ 0 ] )
+        parse_string = class_dec_split[ 1 ]
 
       # Var declarations  
-      elif self._is_beginning( pg.VAR_DEC ):
-        parse = self._parse_search( pg.VAR_DEC )
-        
-        new_var = uc_objects.Variable( )
+      
+      
+      elif self._var_dec_split( parse_string ):
+        var_dec_split = self._var_dec_split( parse_string )
+        new_var = self._var_dec_parse( var_dec_split[ 0 ] )
         parent.add_child( new_var )
-        
-        print 'var parse: {0}'.format( parse )
-        
-        split_dec = parse[ 0 ].split( )
-        
-        new_var.set_name( split_dec.pop( -1 ) )
-        new_var.set_type( split_dec.pop( -1 ) )
-        
-        self._parse_string = parse[ 1 ]
+        parse_string = var_dec_split[ 1 ]
 
       # Body Declarations
-      elif self._is_param_beginning( ( pg.FUNC_PARAMS +
-                                       pg.STATE_PARAMS +
-                                       pg.FUNC_TYPES +
-                                       pg.OPERATOR_TYPES +
-                                       pg.STATE_TYPES ) ):
+      elif self._function_split( parse_string ):
+        function_split = self._function_split(parse_string)
+        new_func = self._function_parse( function_split[ 0 ] )
+        parent.add_child( new_func )
+        parse_string = function_split[ 1 ]
         
-        new_dec = self._parse_body_dec( )
-        parent.add_child( new_dec )
+      elif self._state_split(parse_string):
+        state_split = self._state_split( parse_string )
+        new_state = self._state_parse( state_split[ 0 ] )
+        parent.add_child( new_state )
+        parse_string = state_split[ 1 ]
         
       
       # Default Properties
-      elif self._is_beginning( pg.DEFAULT_PROPERTIES_DEC ):
-        new_props = self._parse_default_properties( )
-        parent.add_child( new_props )
-        
-      if while_string == self._parse_string:
-        self._parse_string = self._parse_string[ 1: ]
+      elif self._default_properties_split( parse_string ):
+        dp_prop_split = self._default_properties_split(parse_string)
+        self._default_properties_parse( dp_prop_split[ 0 ],
+                                        default_properties = self._class.get_default_properties( ) )
+        parse_string = dp_prop_split[ 1 ]
+
+
+      if while_string == parse_string:
+        parse_string = parse_string[ 1: ]
+    
+    return parent
         
   
    
@@ -143,14 +147,11 @@ class UCParser( object ):
   
     
     
-  def _parse_function_body( self, parse_string = None ):
+  def _parse_function_body( self, parse_string ):
     """
     parse the body of an individual function.  This will eventually become more
     complex and actually look at the contents, I believe, but not at this point.
     """
-    
-    if parse_string == None:
-      parse_string = self._parse_string
     
     open_brac_count = 0
     i = 0
@@ -160,66 +161,72 @@ class UCParser( object ):
       if parse_string[ i ] == '}':
         open_brac_count = open_brac_count - 1
       i = i + 1
-    
-    self._parse_string = parse_string[ i + 1: ]
-    print 'parse_string :'
-    print i
-    print parse_string[ i + 1: ]
+
     return( parse_string[ :i ] )
 
   #============================================================================
   # Grammar Element parsers
+  #
   # 
-  # These methods all have an optional argument 'parse_string', in case
-  # the user wants to use the method independent of a full UC parse.
-  # 
-  # All methods return the object created by the parse method.
+  # There are three different types of methods here.  
+  #
+  # The first type ( parser methods ) are the most numerous, as these will
+  # parse an individual type of element (such as a function, a state, a 
+  # default properties property, etc.). 
+  #
+  # The second type ( search methods ) will be called by parser methods
+  # inside of blocks such as the body and the default properties to 
+  # determine the exact type of element being parsed.  These will take a large
+  # chunk of text and while through it until empty, adding new nodes created
+  # by the parser methods to the parent. These don't return anything. 
+  #
+  # The third type( split methods ) determine the beginning and end of an
+  # element type, provided that it is the first thing in the string that it is
+  # given.  This way, it serves as both a check for whether this element is
+  # the next element, and if it is, it returns the input string split at the
+  # end of the next instance of that element.
+  #
   #============================================================================
   
   
   # The class
-  def _parse_class_dec( self, parse_string = None ):
+  def _class_dec_split( self, parse_string ):
+    if self._is_beginning( pg.CLASS_DEC, parse_string, True ):
+      return self._parse_search( pg.CLASS_DEC, parse_string )
+    else:
+      return False
+    
+  
+  def _class_dec_parse( self, parse_string ):
     """
     Parses the class declaration.  Returns the self._class object, since the 
     object that is having values assigned to it is already created
     """
     
-    if parse_string == None:
-      parse_string = self._parse_string
-    
     EXTENDS = 'extends'
     
     # Splits the class dec and the rest of the text
-    split_parse_text = self._parse_search( pg.CLASS_DEC )
-    class_dec = split_parse_text[ 0 ]
-    
-    split_dec = class_dec.split( None, 1 )
-    self._class.set_class_name( split_dec[ 0 ] )
-    if len( split_dec ) > 1 :
-      
-      opt_dec = class_dec.split( None )[ 1: ]
-      
-      if opt_dec[ 0 ].lower( ) == EXTENDS:
-        self._class.set_class_extends( opt_dec[ 1 ] )
-        opt_dec = opt_dec[ 2: ]
+    class_dec = self._parse_search( pg.CLASS_DEC, parse_string, strip = True )
+    split_dec = class_dec[ 0 ].split( None )
+    self._class.set_class_name( split_dec.pop( 0 ) )
+    if len( split_dec ) > 0 :
+
+      if split_dec[ 0 ].lower( ) == EXTENDS:
+        self._class.set_class_extends( split_dec[ 1 ] )
+        opt_dec = split_dec[ 2: ]
     
     
     self._class.add_params( opt_dec )
-    self._parse_string = class_dec = split_parse_text[ 1 ]
-    # return non-parsed text
     return self._class
   
   
   # Body elements ( Functions, States, Operators )
   
-  def _parse_body_dec( self, parse_string = None ):
+  def _parse_body_dec( self, parse_string ):
     """
     Figures out what type of body declaration is being made and passes the 
     data to the appropriate constructor
     """
-    
-    if parse_string == None:
-      parse_string = self._parse_string
     
     # Everything before the first '{', split at whitespaces
     test_split = parse_string.split( '{', 1 )[ 0 ].split( )
@@ -233,15 +240,45 @@ class UCParser( object ):
         
       if item in pg.STATE_TYPES:
         return self._parse_state( parse_string )
+  
+  def _var_dec_split( self, parse_string ):
+    if self._is_beginning( pg.VAR_DEC, parse_string, True ):
+      return self._parse_search( pg.VAR_DEC, parse_string )
+    
+    else:
+      return False
+    
+  def _var_dec_parse( self, parse_string ):
+    new_var = uc_objects.Variable( )
+    
+    stripped = self._parse_search( pg.VAR_DEC, parse_string, True )
+    split_dec = stripped[ 0 ].split( )
+    new_var.set_name( split_dec.pop( -1 ) )
+    new_var.set_type( split_dec.pop( -1 ) )
+    
+    return new_var
       
-  def _parse_function( self, parse_string = None ):
+  
+  def _function_split( self, parse_string ):
+    
+    if self._is_param_beginning( pg.FUNC_PARAMS + pg.FUNC_TYPES, parse_string ):
+      bracket_split = parse_string.split( '{', 1 )
+      for item in bracket_split[ 0 ].split( ):
+        if item in pg.FUNC_TYPES:
+          body_split = self._split_closing_bracket( bracket_split[ 1 ], False )
+          
+          i = len( bracket_split[ 0 ] ) + 1 + len( body_split[ 0 ] )
+          
+          return [ parse_string[ :i ], parse_string[ i: ] ]  
+          
+      
+    return False
+
+  def _function_parse( self, parse_string ):
     """
     Currently aiming to get a string of all function params.  I'm currently
     treating 'Native (INT)' as an edge case, until I need to implement it.
     """
-    
-    if parse_string == None:
-      parse_string = self._parse_string
     
     new_func = uc_objects.NormalFunction( )
         
@@ -262,16 +299,25 @@ class UCParser( object ):
     if not len( split_top ) == 0:
       new_func.set_local_type( ' '.join( split_top ) )
     
-    body_parse = self._parse_function_body( body_split[ 1 ] )
-    new_func.set_body( body_parse )
+    
+    #new_func.set_body( body_parse )
 
     return new_func
   
-  def _parse_state( self, parse_string = None ):
-    
-    if parse_string == None:
-      parse_string = self._parse_string
-    
+  def _state_split( self, parse_string ):
+  
+    if self._is_param_beginning( pg.STATE_PARAMS + pg.STATE_TYPES, parse_string, True ):
+      bracket_split = parse_string.split( '{', 1 )
+      for item in bracket_split[ 0 ].split( ):
+        if item in pg.STATE_TYPES:
+          body_split = self._split_closing_bracket( bracket_split[ 1 ], False )
+          
+          i = len( bracket_split[ 0 ] ) + 1 + len( body_split[ 0 ] )
+          
+          return [ parse_string[ :i ], parse_string[ i: ] ] 
+  
+  def _state_parse( self, parse_string ):
+
     new_state = uc_objects.State( )
     
     body_split = parse_string.split( '{', 1 )
@@ -292,79 +338,99 @@ class UCParser( object ):
     split_top = top_block.split( )
     #TODO: get the state body parser working
     body_parse = self._parse_function_body( body_split[ 1 ] )
-    #body_parse = self._parse_state_body( body_split[ 1 ] )
     new_state.set_body( body_parse[ 0 ] )
     remainder = body_parse[ 1 ]
     
     return new_state
+
+  def _default_properties_split( self, parse_string ):
+    if self._is_beginning( pg.DEFAULT_PROPERTIES_DEC, parse_string ):
+      return self._parse_search( pg.DEFAULT_PROPERTIES_DEC, parse_string )
+    
+    else:
+      return False
   
-  # Default Properties
+  def _default_properties_parse( self,
+                                 parse_string,
+                                 default_properties = uc_objects.DefaultProperites( ) ):
+
+    assert isinstance( default_properties, uc_objects.DefaultProperites )
+
+    prop_block_pre_split = self._parse_search( ('{', '}' ),
+                                               parse_string,
+                                               strip = True )
+
+    props = prop_block_pre_split[ 0 ].strip( )
+    
+    self._default_properties_search( props,
+                                     default_properties )
+
+    return default_properties
   
-  def _parse_default_properties( self, parse_string = None ):
+  def _default_properties_search( self, parse_string, parent ):
     """
     parse the default properties block of the class
     """
-    default_properties = uc_objects.DefaultProperites( )
-    if parse_string == None:
-      parse_string = self._parse_string
     
-
-    prop_block_pre_split = parse_string.split( '{', 1 )[ 1 ].split( '}', 1 )
-    
-    self._parse_string = prop_block_pre_split[ 0 ].strip( )
-    while len( self._parse_string ) > 0:
+    while len( parse_string ) > 0:
       
-      new_comment = self._comment_parse( )
-      if not new_comment == None:
-        default_properties.add_child( new_comment )
+      parse_string = parse_string.strip( )
+      
+      if self._comment_split(parse_string):
+        comment_split = self._comment_split(parse_string)
+        new_comment = self._comment_parse( comment_split[ 0 ] )
+        parent.add_child( new_comment )
+        parse_string = comment_split[ 1 ]
          
+      
+      elif self._dp_object_split(parse_string):
+        dp_obj_split = self._dp_object_split( parse_string )
+        new_dp_obj = self._dp_object_parse( dp_obj_split[ 0 ] )
+        parent.add_child( new_dp_obj )
+        parse_string = dp_obj_split[ 1 ]
          
-      if self._is_beginning( pg.DP_OBJECT_DEC ):
-        prop_object = self._parse_dp_object( )
-        default_properties.add_child( prop_object )
-
       
-      else:
-        split_props = self._parse_string.split( '\n', 1 )
-        new_prop = self._parse_dp_property( split_props[ 0 ] )
-        default_properties.add_child( new_prop )
-        if len( split_props ) > 1:
-          self._parse_string = split_props[ 1 ]
-        else:
-          self._parse_string = ''
-          
-      
-    print prop_block_pre_split
-    self._parse_sting = prop_block_pre_split[ 1 ].strip( )
-    return default_properties
+      elif self._dp_prop_split(parse_string):
+        dp_prop_split = self._dp_prop_split(parse_string)
+        new_dp_prop = self._dp_prop_parse( dp_prop_split[ 0 ] )
+        parent.add_child( new_dp_prop )
+        parse_string = dp_prop_split[ 1 ] 
   
-  def _parse_dp_property( self, parse_string = None ):
-    new_prop = uc_objects.DPProperty( )
-    if parse_string == None:
-      parse_string = self._parse_string
+  def _dp_prop_split( self, parse_string ):
+    split_string = parse_string.split( '\n', 1 )
+    if pg.DP_OBJECT_DEC[ 0 ] not in split_string[ 0 ] and '=' in split_string[ 0 ]:
+      if len( split_string ) == 1:
+        split_string.append( '' )
+      return split_string
+
+  
+  def _dp_prop_parse( self, parse_string ):
+    split_prop = parse_string.split( '=' )
     
-    
-    self._parse_string = parse_string
-    
+    new_prop = uc_objects.DPProperty( split_prop[ 0 ], split_prop[ 1 ] )
     return new_prop
+  
+  def _dp_object_split( self, parse_string ):
+    if self._is_beginning( pg.DP_OBJECT_DEC, parse_string ):
+      return self._parse_search( pg.DP_OBJECT_DEC, parse_string, False )
+    return False
     
-  def _parse_dp_object( self, parse_string = None ):
+    
+  def _dp_object_parse( self, parse_string ):
     """
     Parse an object declared in the default properties.  
     """
-    
-    
-    new_obj = uc_objects.DPObject( )
-    if parse_string == None:
-      parse_string = self._parse_string
-    
-    new_comment = self._comment_parse( )
-    if not new_comment == None:
-      new_obj.add_child( new_comment )
-    
-    split_object = self._parse_search( pg.DP_OBJECT_DEC[ 1 ] )
 
-    self._parse_string = split_object[ 1 ].strip( )
+    new_obj = uc_objects.DPObject( )
+    
+    search_object = self._parse_search( pg.DP_OBJECT_DEC, parse_string, True )
+    split_object = search_object[ 0 ].strip( ).split( '\n', 1 )
+    
+      
+    
+    if len( split_object ) > 1:
+      self._default_properties_search( split_object[ 1 ], new_obj )
+    
     return new_obj
     
 
@@ -372,17 +438,31 @@ class UCParser( object ):
   # Convenience Functions
   #============================================================================
 
+  def _split_closing_bracket( self, parse_string, strip = True ):
+    open = 1
+    i = 0
+    while open > 0:
+      if parse_string[ i ] == '{':
+        open = open + 1
+      elif parse_string[ i ] == '}':
+        open = open - 1
+        
+      i = i + 1
+    if strip == False:  
+      return [ parse_string[ :i ], parse_string[ i: ] ]
+    else:
+      return [ parse_string[ :i - 1 ], parse_string[ i: ] ]
+    
+
   def _is_param_beginning( self,
                            params,
-                           parse_string = None,
+                           parse_string,
                            needs_whitespace = True ):
     """
     Returns True if the beginning of the parse string is one element in a list
     of possible elements
     """
-    
-    if parse_string == None:
-      parse_string = self._parse_string
+
     
     for item in params:
       # Why reinvent the wheel? Use is beginning function from before
@@ -394,15 +474,13 @@ class UCParser( object ):
 
   def _is_beginning( self,
                      grammar_tuple,
-                     parse_string = None,
+                     parse_string,
                      needs_whitespace = False ):
     """
     Return True if the beginning of the parse string is the first element in
     the grammar tuple, otherwise return False.  Convenience function
     """
-    if parse_string == None:
-      parse_string = self._parse_string
-    
+
     if needs_whitespace == True:
       prefix = '{0} '.format( grammar_tuple[ 0 ] )
     else:
@@ -411,28 +489,31 @@ class UCParser( object ):
       return True
     return False
   
-  def _parse_search( self, grammar_tuple, parse_string = None ):
+  def _parse_search( self, grammar_tuple, parse_string, strip = False ):
     """
     Search through the parse string for the beginning and end of the given
     grammar tuple.  Used for leaves only, not something that might be recursed.
     return a list, first element is the grammar part's contents, the second
     element is the remainder of the parse_string.  The beginning and end
-    identifiers are stripped
+    identifiers are not stripped, but included in the first item (the parse
+    element).
     """
-    
-    if parse_string == None:
-      parse_string = self._parse_string
-
     
     first_split = parse_string.lower( ).split( grammar_tuple[ 0 ], 1  )
 
     second_split = first_split[ 1 ].split( grammar_tuple[ 1 ], 1 )
     
-    i = [ len( first_split[ 0 ] ) + len( grammar_tuple[ 0 ] ) ]
-    i.append( i[ 0 ] + len( second_split[ 0 ] ) )
-    i.append( i[ 1 ] + len( grammar_tuple[ 1 ] ) )
-    print i
-    print len( parse_string )
+    if strip == False:
+      i = [ len( first_split[ 0 ] ) ]
+      i.append( i[ 0 ] + len( second_split[ 0 ] ) 
+                       + len( grammar_tuple[ 0 ] )
+                       + len( grammar_tuple[ 1 ] ) )
+      i.append( i[ 1 ] )
+    else:
+      i = [ len( first_split[ 0 ] ) + len( grammar_tuple[ 0 ] ) ]
+      i.append( i[ 0 ] + len( second_split[ 0 ] ) )
+      i.append( i [ 1 ] + len( grammar_tuple[ 1 ] ) )
+    
     return_strings = [ parse_string[ i[ 0 ]: i[ 1 ] ], parse_string[ i[ 2 ]: ] ]
     
     
@@ -440,11 +521,15 @@ class UCParser( object ):
   
 
 test_parser = UCParser( )
-print test_parser.parse( r'C:\Users\Tyler\Downloads\UT_Weaps\UTWeap_ShockRifle.uc')
+c = test_parser.parse( r'C:\Users\Tyler\Downloads\UT_Weaps\UTWeap_ShockRifle.uc')
 #print test_parser._parse_function_body( test_func )
 #print test_parser.parse_from_string( test_full_func )
 #print type(test_parser._class._children )
 print 'chidren:'
-for obj in test_parser._class._children[ - 1 ]._children:
+for obj in test_parser._class._children:
   print obj
+  if isinstance( obj, uc_objects.Comment ):
+    print obj.write_to_string( )
+print 'dp'
+#print test_parser._class._default_properties.write_to_string( )
         

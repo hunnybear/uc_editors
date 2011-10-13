@@ -6,11 +6,14 @@ Created on Aug 28, 2011
 
 import parser_grammar as pg
 
+
 class UCObjectBase( object ):
   """
   Base Abstract UC Unrealscript Object
   """
-  pass
+  def __repr__( self ):
+    return '< UC {0} object >'.format( self.__class__.__name__ )
+
   
 
 class UCParentBase( UCObjectBase ):
@@ -27,42 +30,55 @@ class UCParentBase( UCObjectBase ):
   def remove_child( self, object ):
     if object in self._children:
       self._children.remove( object )
+      
+  
 
 class Comment( UCObjectBase ):
   """
   an Unrealscript comment
   """
-  def __init__( self, comment_text ):
-    self._text = comment_text
+  def __init__( self, comment_text = [ ] ):
+    if isinstance( comment_text, ( list, tuple ) ):
+      self._text = comment_text
+    else:
+      self._text = [ comment_text ]  
+    
     UCObjectBase.__init__( self )
     
   def get_text( self ):
     return self._text
   
   def set_text( self, text ):
+    if isinstance( text, basestring ):
+      text = [ text ] 
     self._text = text
     
   def append( self, object ):
     if isinstance( object, Comment ):
-      self._text = '{0}\n{1}'.format( self._text,
-                                      object.get_text( ) )
+      self._text = self._text + object.get_text( )
+    
+    elif isinstance( object, ( list, tuple ) ):
+      self._text = self._text + object 
       
     else:
-        self._text = '{0}\n{1}'.format( self._text,
-                                        str( object ) )
+        self._text = self._text.append( object )
+        
   def write_to_string( self, tabs = 0  ):
-          
-    if '\n' in self._text:
-      while '\n' in self._text:
-        output_text = pg.ML_COMMENT[ 0 ] + self._text + pg.ML_COMMENT[ 1 ] 
-        output_text.replace( '\n', '\t'*tabs+'\n' )
+    repr(  self._text )
+    ws = WriteString( )
+    
+    if len( self._text ) > 1:
+
+      ws.append( pg.ML_COMMENT[ 0 ], tabs )
+      for l in self._text:
+        ws.append( l, tabs )
+        
+      ws.append( pg.ML_COMMENT[ 1 ], tabs )
       
     else:
-      output_text = pg.SL_COMMENT[ 0 ] + self._text
+      ws.append( pg.SL_COMMENT[ 0 ] + self._text[ 0 ], tabs )
       
-    output_text = '{0}\n'.format( output_text )
-      
-    return output_text
+    return ws.write( )
   
   def __repr__( self ):
     return '< UC Comment object( {0!r} )>'.format( self._text )
@@ -160,29 +176,18 @@ class Variable( BaseVar ):
   def __init__( self, name = None, value = None, type = None ):
     
     BaseVar.__init__( self, name, value )
+    self._type = type
 
-    if type == None:
-      self._type = None
-    else:
-      self.set_type( type )
-    
-  def set_value( self, value ):
-    self._value = value
-    
-  def get_value( self ):
-    return self._value
-  
-  def set_name( self, name ):
-    self._name = name
-    
-  def get_name( self ):
-    return self._name
-  
   def set_type( self, type ):
     self._type = type
   
   def get_type( self ):
     return self._type
+  
+  def __repr__( self ):
+    return '< UC {0} object( Name = {1!r}, Type = {2!r} )>'.format( self.__class__.__name__,
+                                                                    self._name,
+                                                                    self._type )
   
 class Const( BaseVar ):
   """
@@ -260,7 +265,7 @@ class State( UCBodyDecBase ):
   
 
 class DPProperty( UCObjectBase ):
-  def __init__( self, value = None, name = None ):
+  def __init__( self, name = None, value = None ):
     
     self._value = value
     self._name = name
@@ -275,15 +280,47 @@ class DPProperty( UCObjectBase ):
     self._value = value
     
   def get_value( self ):
-    return self._value 
+    return self._value
+  
+  def __repr__( self ):
+    return '< UC {0} object( Name = {1!r}, Value = {2!r} )>'.format( self.__class__.__name__,
+                                                                     self._name,
+                                                                     self._value )
     
 
 class DPObject( UCParentBase ):
   VALID_CHIDLREN = ( DPProperty )
+  
+  def __init__( self, name = None, obj_class = None ):
+    self._class = obj_class
+    self._name = name
+    UCParentBase.__init__( self )
+  
   def add_child( self, object ):
     assert isinstance( object, DPProperty )
     UCParentBase.add_child(self, object)
+    
+  def set_name( self, name ):
+    self._name = name
+    
+  def get_name( self ):
+    return self._name
   
+  def set_class( self, obj_class ):
+    self._class = obj_class
+  def get_class( self ):
+    return self._class
+  
+  def __repr__( self ):
+    return '< UC {0} object( Name = {1!r}, class = {2!r} )>'.format( self.__class__.__name__,
+                                                                     self._name,
+                                                                     self._class )
+    
+  def write_to_string( self, tab_size = 0 ):
+    
+    ws = WriteString( tab_size = tab_size )
+    
+    
 class Function( UCBodyDecBase ):
   def __init__( self,
                 name = None,
@@ -319,4 +356,42 @@ class NormalFunction( Function ):
     
   def get_local_type( self ):
     return self._local_type
+  
+  
+#==============================================================================
+# Convenience Objects
+#==============================================================================
+  
+class WriteString( object ):
+  """
+  This object is used by the UC objects to assist in writing output strings
+  """
+  def __init__( self, tab_size = 2 ):
+    self._string = ''
+    self._tab_size = tab_size
+    
+  def set_string( self, string ):
+    self._string = string
+    
+  def get_string( self ):
+    return self._string
+
+  def set_tab_size( self, tab_size ):
+    self._tab_size = tab_size
+  
+  def get_tab_size( self ):
+    return self._tab_size
+  
+  def append( self, append_string, tabs ):
+    new_line = '\n'
+    if self._string == '':
+      new_line = ''
+    tab_string = ' '*self._tab_size * tabs
+    self._string = '{0}{1}{2}{3}'.format( self._string,
+                                          new_line,
+                                          tab_string,
+                                          append_string )
+    
+  def write( self ):
+    return self._string
   
